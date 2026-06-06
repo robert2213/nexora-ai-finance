@@ -1,12 +1,12 @@
 import PageWrapper from "@/components/layout/PageWrapper";
-import AgentChatPanel from "@/components/agents/AgentChatPanel";
+import AgentWorkspaceCTA from "@/components/agents/AgentWorkspaceCTA";
 import KPICard from "@/components/dashboard/KPICard";
 import VarianceTable from "@/components/dashboard/VarianceTable";
 import StatsBanner from "@/components/dashboard/StatsBanner";
 import {
-  contractors, getTotalContractorYTDSpend, getTotalContractorBudget,
-  getOverBudgetContractors, getEndingSoonContractors, getContractorsByBU,
-} from "@/data/externalLabor";
+  getContractors, getOverBudgetContractors, getEndingSoonContractors,
+  getContractorsByBU,
+} from "@/lib/queries";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import type { KPI } from "@/types/finance";
 import clsx from "clsx";
@@ -23,13 +23,16 @@ function SectionHeader({ label, sub }: { label: string; sub?: string }) {
   );
 }
 
-export default function ExternalLaborPage() {
-  const ytdSpend   = getTotalContractorYTDSpend();
-  const ytdBudget  = getTotalContractorBudget();
-  const overBudget = getOverBudgetContractors();
-  const endingSoon = getEndingSoonContractors();
-  const byBU       = getContractorsByBU();
-  const variance   = ytdSpend - ytdBudget;
+export default async function ExternalLaborPage() {
+  const [contractors, overBudget, endingSoon, byBU] = await Promise.all([
+    getContractors(),
+    getOverBudgetContractors(),
+    getEndingSoonContractors(90),
+    getContractorsByBU(),
+  ]);
+  const ytdSpend  = contractors.reduce((s, c) => s + c.ytdSpend, 0);
+  const ytdBudget = contractors.reduce((s, c) => s + c.budget, 0);
+  const variance  = ytdSpend - ytdBudget;
 
   const kpis: KPI[] = [
     { label: "YTD Contractor Spend", value: ytdSpend,  budget: ytdBudget, prior: ytdBudget * 0.88, format: "currency", trend: "up", trendPositive: false },
@@ -179,7 +182,15 @@ export default function ExternalLaborPage() {
           </div>
         </div>
 
-        <AgentChatPanel agentId="external-labor" initialQuestion="Which contractors are over their approved SOW budget?" />
+        <AgentWorkspaceCTA
+            agentId="external-labor"
+            contextNote="Ask the External Labor Agent to review over-budget SOWs, assess burn rate, or plan contractor transitions."
+            prompts={[
+              "Which contractors are over their approved SOW budget?",
+              "What is our total contractor spend vs. budget by business unit?",
+              "Which engagements are ending this quarter?",
+            ]}
+          />
         </div>
       </section>
 

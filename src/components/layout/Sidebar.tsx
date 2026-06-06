@@ -13,6 +13,8 @@ import {
   HardHat,
   Users,
   Lightbulb,
+  Upload,
+  Network,
   X,
 } from "lucide-react";
 
@@ -33,7 +35,9 @@ const nav: NavItem[] = [
   { href: "/vendors",        label: "Vendor Spend",  sublabel: "Contracts & risk",    icon: ShoppingCart },
   { href: "/external-labor", label: "Ext. Labor",    sublabel: "Contractor spend",    icon: HardHat, badge: "4!", badgeVariant: "warning" },
   { href: "/headcount",      label: "Headcount",     sublabel: "Workforce planning",  icon: Users },
-  { href: "/cio",            label: "CIO Briefing",  sublabel: "IT leadership view",  icon: Lightbulb },
+  { href: "/cio",            label: "CIO Briefing",       sublabel: "IT leadership view",  icon: Lightbulb },
+  { href: "/architecture",   label: "System Architecture", sublabel: "Platform overview",   icon: Network },
+  { href: "/data-ingestion", label: "Data Ingestion",     sublabel: "Upload & pipeline",   icon: Upload, badge: "New", badgeVariant: "success" },
 ];
 
 const badgeColors: Record<string, string> = {

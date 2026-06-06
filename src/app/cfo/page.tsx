@@ -1,12 +1,12 @@
 import PageWrapper from "@/components/layout/PageWrapper";
-import AgentChatPanel from "@/components/agents/AgentChatPanel";
+import AgentWorkspaceCTA from "@/components/agents/AgentWorkspaceCTA";
 import ExecutiveSummaryBox from "@/components/dashboard/ExecutiveSummaryBox";
 import RiskAlerts from "@/components/dashboard/RiskAlerts";
 import RecommendedActions from "@/components/dashboard/RecommendedActions";
 import KPICard from "@/components/dashboard/KPICard";
 import StatsBanner from "@/components/dashboard/StatsBanner";
 import { generateRiskFlags, generateRecommendedActions } from "@/lib/riskEngine";
-import { getYTDActual, getYTDBudget, getYTDVariance } from "@/data/actuals";
+import { getYTDSummary } from "@/lib/queries";
 import { formatCurrency, formatPercent } from "@/lib/formatters";
 import type { KPI } from "@/types/finance";
 
@@ -22,13 +22,11 @@ function SectionHeader({ label, sub }: { label: string; sub?: string }) {
   );
 }
 
-export default function CFOPage() {
-  const risks      = generateRiskFlags();
-  const actions    = generateRecommendedActions();
-  const ytdActual  = getYTDActual();
-  const ytdBudget  = getYTDBudget();
-  const ytdVar     = getYTDVariance();
-  const ytdVarPct  = ytdBudget > 0 ? ytdVar / ytdBudget : 0;
+export default async function CFOPage() {
+  const risks   = generateRiskFlags();
+  const actions = generateRecommendedActions();
+  const ytd     = await getYTDSummary();
+  const { actual: ytdActual, budget: ytdBudget, variance: ytdVar, variancePct: ytdVarPct } = ytd;
 
   const kpis: KPI[] = [
     {
@@ -71,9 +69,9 @@ export default function CFOPage() {
         </div>
       </section>
 
-      {/* Executive summary + Chat */}
+      {/* Executive summary + Agent CTA */}
       <section className="mb-8">
-        <SectionHeader label="Executive Summary & Agent Analysis" sub="CFO Agent narrative + live chat" />
+        <SectionHeader label="Executive Summary & Agent Analysis" sub="CFO Agent narrative and workspace" />
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <ExecutiveSummaryBox
             agentName="CFO Agent"
@@ -87,7 +85,15 @@ export default function CFOPage() {
               "FinOps program projected to recover $350K in cloud savings — Q4 target",
             ]}
           />
-          <AgentChatPanel agentId="cfo" initialQuestion="Give me the executive financial summary for May 2026" />
+          <AgentWorkspaceCTA
+            agentId="cfo"
+            contextNote="Ask the CFO Agent to explain the variance narrative, prepare board talking points, or identify the top risks from the data above."
+            prompts={[
+              "Give me the executive financial summary for May 2026",
+              "How do we explain the budget variance to the board?",
+              "What are the top 3 financial risks requiring action?",
+            ]}
+          />
         </div>
       </section>
 
