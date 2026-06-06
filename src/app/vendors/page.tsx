@@ -1,23 +1,37 @@
 import PageWrapper from "@/components/layout/PageWrapper";
-import AgentChatPanel from "@/components/agents/AgentChatPanel";
+import AgentWorkspaceCTA from "@/components/agents/AgentWorkspaceCTA";
 import RiskAlerts from "@/components/dashboard/RiskAlerts";
 import KPICard from "@/components/dashboard/KPICard";
 import StatsBanner from "@/components/dashboard/StatsBanner";
-import {
-  vendors, getVendorsExpiringSoon,
-  getTotalAnnualCommitment, getTotalYTDVendorSpend,
-} from "@/data/vendors";
+import { getVendors } from "@/lib/queries";
 import { generateRiskFlags } from "@/lib/riskEngine";
 import { formatCurrency, formatDate, daysUntil, isExpiringSoon } from "@/lib/formatters";
 import type { KPI } from "@/types/finance";
 import clsx from "clsx";
 
-export default function VendorsPage() {
-  const expiring   = getVendorsExpiringSoon(180);
+function SectionHeader({ label, sub }: { label: string; sub?: string }) {
+  return (
+    <div className="section-heading">
+      <span className="section-heading-bar" />
+      <span className="section-heading-text">
+        {label}
+        {sub && <span className="section-heading-sub">{sub}</span>}
+      </span>
+    </div>
+  );
+}
+
+export default async function VendorsPage() {
+  const vendors    = await getVendors();
+  const today      = new Date().toISOString().slice(0, 10);
+  const in180      = new Date();
+  in180.setDate(in180.getDate() + 180);
+  const in180Str   = in180.toISOString().slice(0, 10);
+  const expiring   = vendors.filter(v => v.contractEnd && v.contractEnd <= in180Str && v.contractEnd >= today);
   const procRisks  = generateRiskFlags().filter(r => r.category === "Procurement");
-  const totalCommit = getTotalAnnualCommitment();
-  const ytdSpend   = getTotalYTDVendorSpend();
-  const highRisk   = vendors.filter(v => v.riskLevel === "High").length;
+  const totalCommit = vendors.reduce((s, v) => s + v.annualValue, 0);
+  const ytdSpend    = vendors.reduce((s, v) => s + v.ytdSpend, 0);
+  const highRisk    = vendors.filter(v => v.riskLevel === "High").length;
 
   const kpis: KPI[] = [
     { label: "Annual Commitment",    value: totalCommit,       budget: totalCommit,       prior: totalCommit * 0.95, format: "currency", trend: "up",   trendPositive: false },
@@ -41,11 +55,16 @@ export default function VendorsPage() {
     >
       <StatsBanner />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {kpis.map((k, i) => <KPICard key={i} kpi={k} />)}
-      </div>
+      <section className="mb-8">
+        <SectionHeader label="Key Performance Indicators" sub="Vendor portfolio health" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {kpis.map((k, i) => <KPICard key={i} kpi={k} />)}
+        </div>
+      </section>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
+      <section className="mb-8">
+        <SectionHeader label="Vendor Portfolio & Agent Analysis" sub="Contract status, risk levels, expiry timeline" />
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Vendor table */}
         <div className="xl:col-span-2 card overflow-hidden">
           <div className="card-header flex items-center justify-between">
@@ -149,10 +168,22 @@ export default function VendorsPage() {
           </div>
         </div>
 
-        <AgentChatPanel agentId="procurement" initialQuestion="Which contracts are expiring in the next 6 months?" />
-      </div>
+        <AgentWorkspaceCTA
+            agentId="procurement"
+            contextNote="Ask the Procurement Agent about contracts expiring above, renewal priorities, or vendor concentration risk."
+            prompts={[
+              "Which contracts are expiring in the next 90 days?",
+              "Where do we have vendor concentration risk?",
+              "Which vendors should we prioritize for renewal?",
+            ]}
+          />
+        </div>
+      </section>
 
-      <RiskAlerts flags={procRisks} />
+      <section>
+        <SectionHeader label="Procurement Risk Alerts" sub="Active flags requiring action" />
+        <RiskAlerts flags={procRisks} />
+      </section>
     </PageWrapper>
   );
 }

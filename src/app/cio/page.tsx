@@ -1,36 +1,52 @@
 import PageWrapper from "@/components/layout/PageWrapper";
-import AgentChatPanel from "@/components/agents/AgentChatPanel";
+import AgentWorkspaceCTA from "@/components/agents/AgentWorkspaceCTA";
 import KPICard from "@/components/dashboard/KPICard";
 import SpendTrendChart from "@/components/charts/SpendTrendChart";
 import VarianceTable from "@/components/dashboard/VarianceTable";
 import ExecutiveSummaryBox from "@/components/dashboard/ExecutiveSummaryBox";
 import StatsBanner from "@/components/dashboard/StatsBanner";
+// Cloud-by-provider chart still uses static data — provider breakdown
+// is not captured in fact_transactions without a separate cloud spend table.
 import {
   getTotalCloudSpendByMonth, getCloudByProvider,
-  getTotalCloudYTD, getTotalCloudBudgetYTD,
 } from "@/data/cloudSpend";
-import { getYTDActual, getYTDBudget } from "@/data/actuals";
-import { getTotalContractorYTDSpend } from "@/data/externalLabor";
-import { getHeadcountSummary } from "@/data/headcount";
+import { getYTDSummary, getHCSummary, getContractors } from "@/lib/queries";
 import { formatCurrency, formatPercent } from "@/lib/formatters";
 import type { KPI } from "@/types/finance";
 import clsx from "clsx";
 
-export default function CIOPage() {
+function SectionHeader({ label, sub }: { label: string; sub?: string }) {
+  return (
+    <div className="section-heading">
+      <span className="section-heading-bar" />
+      <span className="section-heading-text">
+        {label}
+        {sub && <span className="section-heading-sub">{sub}</span>}
+      </span>
+    </div>
+  );
+}
+
+export default async function CIOPage() {
   const cloudByMonth   = getTotalCloudSpendByMonth();
   const cloudProviders = getCloudByProvider();
-  const totalCloud     = getTotalCloudYTD();
-  const cloudBudget    = getTotalCloudBudgetYTD();
-  const totalIT        = getYTDActual();
-  const itBudget       = getYTDBudget();
-  const hc             = getHeadcountSummary();
-  const cloudPct       = totalCloud / totalIT;
+  const [ytd, hc, allContractors] = await Promise.all([
+    getYTDSummary(),
+    getHCSummary(),
+    getContractors(),
+  ]);
+  const totalIT    = ytd.actual;
+  const itBudget   = ytd.budget;
+  const totalCloud = cloudProviders.reduce((s, p) => s + p.ytdSpend, 0);
+  const cloudBudget = cloudProviders.reduce((s, p) => s + p.ytdBudget, 0);
+  const cloudPct   = totalIT > 0 ? totalCloud / totalIT : 0;
+  const contractorYTD = allContractors.reduce((s, c) => s + c.ytdSpend, 0);
 
   const kpis: KPI[] = [
     { label: "Total IT Spend YTD",  value: totalIT,    budget: itBudget,    prior: itBudget * 0.94,   format: "currency", trend: "up",   trendPositive: false },
     { label: "Cloud Spend YTD",     value: totalCloud, budget: cloudBudget, prior: cloudBudget * 0.9, format: "currency", trend: "up",   trendPositive: false },
     { label: "Cloud % of IT Spend", value: cloudPct,   budget: 0.40,        prior: 0.38,              format: "percent",  trend: "up",   trendPositive: false },
-    { label: "HC Fill Rate",        value: hc.filled / hc.total, budget: 0.90, prior: (hc.filled - 1) / hc.total, format: "percent", trend: "up", trendPositive: true },
+    { label: "HC Fill Rate",        value: hc.fillRate, budget: 0.90, prior: hc.total > 0 ? (hc.filled - 1) / hc.total : 0, format: "percent", trend: "up", trendPositive: true },
   ];
 
   const cloudTrendData = cloudByMonth.map(m => ({
@@ -47,12 +63,12 @@ export default function CIOPage() {
   }));
 
   const investmentBreakdown = [
-    { label: "Cloud Infrastructure", value: totalCloud,                       pct: cloudPct,                              color: "bg-indigo-500" },
-    { label: "Labor (FTE)",          value: totalIT * 0.28,                   pct: 0.28,                                  color: "bg-emerald-500" },
-    { label: "External Labor",       value: getTotalContractorYTDSpend(),     pct: getTotalContractorYTDSpend() / totalIT, color: "bg-amber-500" },
-    { label: "Software & SaaS",      value: totalIT * 0.18,                   pct: 0.18,                                  color: "bg-blue-500"   },
-    { label: "Professional Services",value: totalIT * 0.09,                   pct: 0.09,                                  color: "bg-purple-500" },
-    { label: "Hardware & Facilities",value: totalIT * 0.06,                   pct: 0.06,                                  color: "bg-slate-400"  },
+    { label: "Cloud Infrastructure", value: totalCloud,    pct: cloudPct,                                             color: "bg-indigo-500" },
+    { label: "Labor (FTE)",          value: totalIT * 0.28, pct: 0.28,                                                  color: "bg-emerald-500" },
+    { label: "External Labor",       value: contractorYTD,  pct: totalIT > 0 ? contractorYTD / totalIT : 0,            color: "bg-amber-500" },
+    { label: "Software & SaaS",      value: totalIT * 0.18, pct: 0.18,                                                  color: "bg-blue-500"   },
+    { label: "Professional Services",value: totalIT * 0.09, pct: 0.09,                                                  color: "bg-purple-500" },
+    { label: "Hardware & Facilities",value: totalIT * 0.06, pct: 0.06,                                                  color: "bg-slate-400"  },
   ];
 
   return (
@@ -63,12 +79,15 @@ export default function CIOPage() {
     >
       <StatsBanner />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {kpis.map((k, i) => <KPICard key={i} kpi={k} />)}
-      </div>
+      <section className="mb-8">
+        <SectionHeader label="Key Performance Indicators" sub="IT investment metrics · YTD May 2026" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {kpis.map((k, i) => <KPICard key={i} kpi={k} />)}
+        </div>
+      </section>
 
-      {/* CIO Executive Summary */}
-      <div className="mb-8">
+      <section className="mb-8">
+        <SectionHeader label="Executive Summary" sub="CIO Finance Partner · IT investment narrative" />
         <ExecutiveSummaryBox
           agentName="CIO Finance Partner Agent"
           agentAvatar="💡"
@@ -81,10 +100,11 @@ export default function CIOPage() {
             "FinOps program = $350K savings target by Q4 through right-sizing and committed use discounts",
           ]}
         />
-      </div>
+      </section>
 
-      {/* Cloud trend chart + Chat */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
+      <section className="mb-8">
+        <SectionHeader label="Cloud Spend Trend & Agent Analysis" sub="Provider breakdown and CIO briefing chat" />
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2 card overflow-hidden">
           <div className="card-header flex items-center justify-between">
             <div>
@@ -111,14 +131,21 @@ export default function CIOPage() {
           </div>
         </div>
 
-        <AgentChatPanel
+        <AgentWorkspaceCTA
           agentId="cio"
-          initialQuestion="Give me CIO-ready talking points on our IT financial performance"
+          contextNote="Ask the CIO Finance Partner to prepare executive talking points, explain cloud ROI, or draft board-ready commentary."
+          prompts={[
+            "Prepare a 5-point IT financial briefing for the executive team",
+            "Give me CIO-ready talking points on cloud spend and ROI",
+            "How do I explain the IT budget variance to the CEO?",
+          ]}
         />
-      </div>
+        </div>
+      </section>
 
-      {/* Cloud provider table + IT breakdown */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+      <section className="mb-8">
+        <SectionHeader label="Cloud Provider Detail & IT Investment Mix" sub="Provider variance and spend category breakdown" />
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <VarianceTable
           title="Cloud Spend by Provider — YTD"
           subtitle="All three providers trending over budget"
@@ -164,10 +191,12 @@ export default function CIOPage() {
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      </section>
 
-      {/* Cloud provider detail cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <section>
+        <SectionHeader label="Cloud Provider Cards" sub="YTD spend and budget variance per provider" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {cloudProviders.map(p => {
           const v   = p.ytdSpend - p.ytdBudget;
           const pct = p.ytdBudget > 0 ? v / p.ytdBudget : 0;
@@ -201,7 +230,8 @@ export default function CIOPage() {
             </div>
           );
         })}
-      </div>
+        </div>
+      </section>
     </PageWrapper>
   );
 }
